@@ -620,3 +620,5 @@ Convolutional Neural Networks represent a paradigm shift in deep learning, enabl
 In cybersecurity applications, CNNs demonstrate remarkable capability in malware detection by transforming binary analysis into visual pattern recognition. The implemented system achieves high accuracy in classifying malware families, showcasing the practical utility of CNNs beyond traditional computer vision tasks.
 
 The mathematical foundations of convolution operations, combined with non-linear activations and pooling mechanisms, create powerful feature extractors that outperform handcrafted approaches. As malware continues to evolve, CNN-based detection systems offer adaptive, robust solutions capable of identifying novel threats through structural pattern analysis.
+
+Author: Tornike Tchabukiani
