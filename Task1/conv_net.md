@@ -28,11 +28,11 @@ A kernel (or filter) is a small learnable matrix of weights that slides across t
 
 **Stride** controls the step size of the kernel as it moves across the input. A stride of 1 means the kernel moves one pixel at a time, while larger strides reduce output dimensions and computational cost. The output dimension for a given stride $s$ is:
 
-$$\text{output\_size} = \left\lfloor \frac{\text{input\_size} - \text{kernel\_size}}{s} \right\rfloor + 1$$
+$$\text{output size} = \left\lfloor \frac{\text{input size} - \text{kernel size}}{s} \right\rfloor + 1$$
 
 **Padding** adds borders of zeros around the input to control output dimensions. Valid padding uses no padding, while same padding ensures the output has the same spatial dimensions as the input:
 
-$$\text{padding} = \left\lfloor \frac{\text{kernel\_size} - 1}{2} \right\rfloor$$
+$$\text{padding} = \left\lfloor \frac{\text{kernel size} - 1}{2} \right\rfloor$$
 
 ## 3. CNN Architecture Components
 
@@ -198,16 +198,391 @@ This approach has been successfully deployed in enterprise security systems, ach
 
 ## 9. Python Implementation
 
-The complete implementation is provided in the accompanying Python script `malware_cnn.py`, which includes:
+### 9.1 Complete Source Code
 
-- Synthetic malware dataset generation with type-specific patterns
-- Data preprocessing and normalization
-- CNN model architecture definition
-- Model training with validation
-- Performance evaluation with classification metrics
-- Visualization of training history and predictions
+```python
+"""
+Malware Detection using Convolutional Neural Networks
+Binary to Image Conversion and Classification
+"""
 
-### 9.1 Implementation Results and Analysis
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.utils import to_categorical
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
+import seaborn as sns
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# ============================================================================
+# SECTION 1: SYNTHETIC MALWARE DATA GENERATION
+# ============================================================================
+
+def generate_malware_pattern(malware_type, size=64):
+    """
+    Generate synthetic binary patterns for different malware families.
+    
+    Args:
+        malware_type: 0=Trojan, 1=Ransomware, 2=Worm, 3=Spyware
+        size: Image dimension (size x size)
+    
+    Returns:
+        64x64 grayscale image representing binary structure
+    """
+    img = np.random.randint(0, 256, (size, size), dtype=np.uint8)
+    
+    if malware_type == 0:  # Trojan - Code injection patterns
+        # Create diagonal patterns (code redirection)
+        for i in range(size):
+            img[i, i] = 200
+            if i < size - 1:
+                img[i, i+1] = 180
+        # Add random hotspots (injection points)
+        for _ in range(5):
+            x, y = np.random.randint(0, size-10, 2)
+            img[x:x+10, y:y+10] = 220
+            
+    elif malware_type == 1:  # Ransomware - Encryption routines
+        # Create block patterns (encryption blocks)
+        block_size = 8
+        for i in range(0, size, block_size):
+            for j in range(0, size, block_size):
+                if (i//block_size + j//block_size) % 2 == 0:
+                    img[i:i+block_size, j:j+block_size] = np.random.randint(150, 200)
+                else:
+                    img[i:i+block_size, j:j+block_size] = np.random.randint(50, 100)
+        # Add encryption key patterns
+        img[0:8, :] = 255
+        
+    elif malware_type == 2:  # Worm - Network propagation code
+        # Create horizontal wave patterns (network traffic)
+        for i in range(size):
+            wave = int(128 + 100 * np.sin(i * 0.3))
+            img[i, :] = np.clip(wave + np.random.randint(-20, 20, size), 0, 255)
+        # Add vertical stripes (port scanning)
+        for j in range(0, size, 10):
+            img[:, j] = 255
+            
+    elif malware_type == 3:  # Spyware - Data exfiltration modules
+        # Create concentric circles (data collection)
+        center = size // 2
+        for i in range(size):
+            for j in range(size):
+                dist = np.sqrt((i-center)**2 + (j-center)**2)
+                img[i, j] = int(128 + 100 * np.sin(dist * 0.2)) % 256
+        # Add corner markers (exfiltration endpoints)
+        img[0:10, 0:10] = 240
+        img[0:10, -10:] = 240
+        img[-10:, 0:10] = 240
+        img[-10:, -10:] = 240
+    
+    return img
+
+def create_malware_dataset(samples_per_class=70, img_size=64):
+    """
+    Create a balanced dataset of synthetic malware samples.
+    
+    Args:
+        samples_per_class: Number of samples per malware family
+        img_size: Image dimension
+    
+    Returns:
+        X: Image data (N, img_size, img_size, 1)
+        y: Labels (N,)
+        class_names: List of malware family names
+    """
+    class_names = ['Trojan', 'Ransomware', 'Worm', 'Spyware']
+    num_classes = len(class_names)
+    total_samples = samples_per_class * num_classes
+    
+    X = np.zeros((total_samples, img_size, img_size, 1), dtype=np.float32)
+    y = np.zeros(total_samples, dtype=np.int32)
+    
+    print("Generating synthetic malware dataset...")
+    for class_idx in range(num_classes):
+        for sample_idx in range(samples_per_class):
+            idx = class_idx * samples_per_class + sample_idx
+            img = generate_malware_pattern(class_idx, img_size)
+            X[idx, :, :, 0] = img / 255.0  # Normalize to [0, 1]
+            y[idx] = class_idx
+        print(f"  Generated {samples_per_class} samples for {class_names[class_idx]}")
+    
+    return X, y, class_names
+
+# ============================================================================
+# SECTION 2: CNN MODEL ARCHITECTURE
+# ============================================================================
+
+def build_malware_cnn(input_shape=(64, 64, 1), num_classes=4):
+    """
+    Build CNN architecture for malware classification.
+    
+    Architecture:
+        Conv2D(32) -> ReLU -> MaxPool -> 
+        Conv2D(64) -> ReLU -> MaxPool -> 
+        Flatten -> Dense(128) -> Dropout(0.5) -> 
+        Dense(num_classes) -> Softmax
+    
+    Args:
+        input_shape: Input image dimensions
+        num_classes: Number of malware families
+    
+    Returns:
+        Compiled Keras model
+    """
+    model = Sequential([
+        # First Convolutional Block
+        Conv2D(32, kernel_size=(3, 3), activation='relu', 
+               input_shape=input_shape, padding='same', name='conv1'),
+        MaxPooling2D(pool_size=(2, 2), name='pool1'),
+        
+        # Second Convolutional Block
+        Conv2D(64, kernel_size=(3, 3), activation='relu', 
+               padding='same', name='conv2'),
+        MaxPooling2D(pool_size=(2, 2), name='pool2'),
+        
+        # Flatten and Dense Layers
+        Flatten(name='flatten'),
+        Dense(128, activation='relu', name='dense1'),
+        Dropout(0.5, name='dropout'),
+        Dense(num_classes, activation='softmax', name='output')
+    ])
+    
+    model.compile(
+        optimizer='adam',
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    
+    return model
+
+# ============================================================================
+# SECTION 3: TRAINING AND EVALUATION
+# ============================================================================
+
+def train_and_evaluate():
+    """
+    Complete training pipeline: data generation, model training, evaluation.
+    """
+    # Generate dataset
+    X, y, class_names = create_malware_dataset(samples_per_class=70, img_size=64)
+    
+    # Split into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+    
+    # Convert labels to categorical (one-hot encoding)
+    y_train_cat = to_categorical(y_train, num_classes=4)
+    y_test_cat = to_categorical(y_test, num_classes=4)
+    
+    print(f"\nDataset Statistics:")
+    print(f"  Training samples: {len(X_train)}")
+    print(f"  Test samples: {len(X_test)}")
+    print(f"  Image shape: {X_train.shape[1:]}")
+    print(f"  Number of classes: {len(class_names)}")
+    
+    # Build model
+    model = build_malware_cnn(input_shape=(64, 64, 1), num_classes=4)
+    
+    print("\nModel Architecture:")
+    model.summary()
+    
+    # Train model
+    print("\nTraining CNN model...")
+    history = model.fit(
+        X_train, y_train_cat,
+        validation_split=0.2,
+        epochs=30,
+        batch_size=32,
+        verbose=1
+    )
+    
+    # Evaluate on test set
+    test_loss, test_accuracy = model.evaluate(X_test, y_test_cat, verbose=0)
+    print(f"\nTest Accuracy: {test_accuracy*100:.2f}%")
+    print(f"Test Loss: {test_loss:.4f}")
+    
+    # Predictions
+    y_pred = model.predict(X_test)
+    y_pred_classes = np.argmax(y_pred, axis=1)
+    
+    # Classification Report
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred_classes, 
+                                target_names=class_names))
+    
+    # Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred_classes)
+    
+    # ========================================================================
+    # VISUALIZATION
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(16, 12))
+    
+    # 1. Training History - Accuracy
+    plt.subplot(3, 3, 1)
+    plt.plot(history.history['accuracy'], label='Train Accuracy', linewidth=2)
+    plt.plot(history.history['val_accuracy'], label='Val Accuracy', linewidth=2)
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('Accuracy', fontsize=12)
+    plt.title('Model Accuracy Over Time', fontsize=14, fontweight='bold')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # 2. Training History - Loss
+    plt.subplot(3, 3, 2)
+    plt.plot(history.history['loss'], label='Train Loss', linewidth=2)
+    plt.plot(history.history['val_loss'], label='Val Loss', linewidth=2)
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('Loss', fontsize=12)
+    plt.title('Model Loss Over Time', fontsize=14, fontweight='bold')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # 3. Confusion Matrix
+    plt.subplot(3, 3, 3)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Count'})
+    plt.xlabel('Predicted Label', fontsize=12)
+    plt.ylabel('True Label', fontsize=12)
+    plt.title('Confusion Matrix', fontsize=14, fontweight='bold')
+    
+    # 4-9. Sample Images from Each Class
+    for class_idx in range(4):
+        plt.subplot(3, 3, 4 + class_idx)
+        # Find first test sample of this class
+        sample_idx = np.where(y_test == class_idx)[0][0]
+        plt.imshow(X_test[sample_idx, :, :, 0], cmap='gray')
+        pred_class = y_pred_classes[sample_idx]
+        true_class = y_test[sample_idx]
+        color = 'green' if pred_class == true_class else 'red'
+        plt.title(f'True: {class_names[true_class]}\nPred: {class_names[pred_class]}',
+                 fontsize=11, fontweight='bold', color=color)
+        plt.axis('off')
+    
+    # 7-8. Additional sample predictions
+    for i in range(2):
+        plt.subplot(3, 3, 8 + i)
+        sample_idx = np.random.randint(0, len(X_test))
+        plt.imshow(X_test[sample_idx, :, :, 0], cmap='gray')
+        pred_class = y_pred_classes[sample_idx]
+        true_class = y_test[sample_idx]
+        pred_prob = y_pred[sample_idx, pred_class] * 100
+        color = 'green' if pred_class == true_class else 'red'
+        plt.title(f'True: {class_names[true_class]}\nPred: {class_names[pred_class]} ({pred_prob:.1f}%)',
+                 fontsize=11, fontweight='bold', color=color)
+        plt.axis('off')
+    
+    plt.tight_layout()
+    plt.savefig('malware_cnn_results.png', dpi=300, bbox_inches='tight')
+    print("\nVisualization saved as 'malware_cnn_results.png'")
+    plt.show()
+    
+    return model, history, X_test, y_test, y_pred_classes, class_names
+
+# ============================================================================
+# SECTION 4: MAIN EXECUTION
+# ============================================================================
+
+if __name__ == "__main__":
+    print("="*70)
+    print("MALWARE DETECTION USING CONVOLUTIONAL NEURAL NETWORKS")
+    print("="*70)
+    
+    # Run complete pipeline
+    model, history, X_test, y_test, y_pred, class_names = train_and_evaluate()
+    
+    print("\n" + "="*70)
+    print("Training Complete!")
+    print("="*70)
+```
+
+### 9.2 Sample Dataset Structure
+
+The synthetic dataset generated by the code follows this structure:
+
+**Dataset Dimensions:**
+- Total Samples: 280 (70 per class)
+- Training Set: 224 samples (80%)
+- Test Set: 56 samples (20%)
+- Image Shape: 64 × 64 × 1 (grayscale)
+- Classes: 4 malware families
+
+**Sample Data Table:**
+
+| Sample ID | Malware Type | Image Size | Pattern Characteristics | Label (Encoded) |
+|-----------|-------------|------------|------------------------|-----------------|
+| 0000 | Trojan | 64×64 | Diagonal code injection patterns, hotspots | 0 |
+| 0001 | Trojan | 64×64 | Code redirection signatures | 0 |
+| 0070 | Ransomware | 64×64 | Block encryption patterns, key headers | 1 |
+| 0071 | Ransomware | 64×64 | Symmetric encryption blocks | 1 |
+| 0140 | Worm | 64×64 | Horizontal wave patterns, port scan stripes | 2 |
+| 0141 | Worm | 64×64 | Network propagation signatures | 2 |
+| 0210 | Spyware | 64×64 | Concentric circles, corner exfiltration markers | 3 |
+| 0211 | Spyware | 64×64 | Data collection patterns | 3 |
+
+**Pixel Value Distribution by Malware Type:**
+
+```
+Trojan (Class 0):
+  - Base noise: Random values 0-255
+  - Diagonal elements: 200 (code paths)
+  - Injection hotspots: 220 (10×10 regions)
+  - Mean pixel intensity: ~145
+
+Ransomware (Class 1):
+  - Alternating blocks: 150-200 (encrypted) / 50-100 (plain)
+  - Header row: 255 (encryption keys)
+  - Block size: 8×8 pixels
+  - Mean pixel intensity: ~135
+
+Worm (Class 2):
+  - Sinusoidal waves: 28-228 range
+  - Vertical stripes: 255 (every 10th column)
+  - Wave frequency: 0.3 rad/pixel
+  - Mean pixel intensity: ~140
+
+Spyware (Class 3):
+  - Radial patterns: Sinusoidal based on distance
+  - Corner markers: 240 (10×10 regions)
+  - Center point: (32, 32)
+  - Mean pixel intensity: ~130
+```
+
+**Data Preprocessing Steps:**
+
+1. **Normalization**: Raw pixel values [0, 255] → [0.0, 1.0]
+   ```python
+   X_normalized = X_raw / 255.0
+   ```
+
+2. **Reshaping**: Flattened binaries → 4D tensor (samples, height, width, channels)
+   ```python
+   X_reshaped = X.reshape(-1, 64, 64, 1)
+   ```
+
+3. **One-Hot Encoding**: Integer labels → categorical vectors
+   ```python
+   # Label 2 (Worm) becomes [0, 0, 1, 0]
+   y_categorical = to_categorical(y, num_classes=4)
+   ```
+
+4. **Train-Test Split**: Stratified 80-20 split maintaining class balance
+   ```python
+   # Each class: 56 training + 14 test samples
+   X_train, X_test, y_train, y_test = train_test_split(
+       X, y, test_size=0.2, stratify=y
+   )
+   ```
+
+### 9.3 Implementation Results and Analysis
 
 **Model Performance Metrics**
 
