@@ -1,6 +1,6 @@
 # DDoS Detection Using Regression Analysis - Complete Report
 
-**Author:** Tornike Tchabukiani (t_tchabukiani25_16928)  
+**Author:** Tornike Tchabukiani
 **Date:** February 12, 2026  
 **Dataset:** [t_tchabukiani25_16928_server.log](./t_tchabukiani25_16928_server.log)
 
