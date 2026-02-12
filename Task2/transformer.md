@@ -1,4 +1,3 @@
-```markdown
 # Task 2: Transformer Networks and Applications in Cybersecurity
 
 ## Part A: Transformer Network Architecture
@@ -81,19 +80,22 @@ $$
 
 The scaling factor $\sqrt{d_k}$ is critical because dot products grow in magnitude with dimension, pushing softmax into regions with small gradients.
 
+**Attention Mechanism Flow Diagram:**
+
 ```mermaid
-graph TD
-    A[Input Sequence] --> B[Linear Projection]
+flowchart TB
+    A[Input Sequence] --> B[Linear Projections]
     B --> C[Query Q]
     B --> D[Key K]
     B --> E[Value V]
-    C --> F[Matrix Multiplication QK^T]
+    C --> F[Compute QK^T]
     D --> F
-    F --> G[Scale by sqrt d_k]
-    G --> H[Softmax]
-    H --> I[Multiply by V]
-    E --> I
-    I --> J[Attention Output]
+    F --> G[Scale by sqrt of d_k]
+    G --> H[Apply Softmax]
+    H --> I[Attention Weights]
+    I --> J[Weighted Sum with V]
+    E --> J
+    J --> K[Attention Output]
 ```
 
 ### Multi-Head Attention
@@ -155,16 +157,18 @@ where:
 
 The positional encoding is added element-wise to the input embeddings before the first encoder layer.
 
+**Positional Encoding Visualization:**
+
 ```mermaid
-graph LR
-    A[Input Tokens] --> B[Token Embedding]
-    B --> C[Embedding Vector]
-    D[Position Indices] --> E[Positional Encoding]
-    E --> F[Positional Vector]
+flowchart LR
+    A[Input Tokens] --> B[Token Embedding Layer]
+    B --> C[Token Embeddings]
+    D[Position Indices] --> E[Positional Encoding Function]
+    E --> F[Positional Encodings]
     C --> G[Element-wise Addition]
     F --> G
-    G --> H[Encoded Input]
-    H --> I[Self-Attention Layer]
+    G --> H[Final Input Representation]
+    H --> I[Self-Attention Mechanism]
 ```
 
 ### Feed-Forward Networks
@@ -372,4 +376,3 @@ Traditional static analysis uses n-gram features or hand-crafted signatures. Dee
 Transformer networks represent a paradigm shift in sequence modeling, enabling unprecedented performance through parallelizable self-attention mechanisms. Their ability to capture long-range dependencies, scale to massive datasets, and transfer across domains makes them invaluable for cybersecurity applications. From intrusion detection to malware analysis, Transformers provide the pattern recognition capabilities necessary to defend against sophisticated, evolving threats in modern attack landscapes.
 
 The mathematical foundations—scaled dot-product attention, multi-head mechanisms, and positional encodings—combine to create architectures that learn hierarchical, contextual representations. As cybersecurity challenges grow in complexity, Transformer-based solutions offer the accuracy, speed, and adaptability required for effective threat detection and response.
-```
