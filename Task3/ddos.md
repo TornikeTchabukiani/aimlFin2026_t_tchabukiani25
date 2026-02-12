@@ -357,7 +357,7 @@ The 2-minute gap between waves is characteristic of:
 
 ## 6. Visualizations
 
-![DDoS Analysis Visualization] <img width="2380" height="1780" alt="ddos_analysis" src="https://github.com/user-attachments/assets/7ad33e0a-0682-4c1f-b0bb-930e9ed065b7" />
+DDoS Analysis Visualization <img width="2380" height="1780" alt="ddos_analysis" src="https://github.com/user-attachments/assets/7ad33e0a-0682-4c1f-b0bb-930e9ed065b7" />
 
 
 ### 6.1 Visualization Interpretation
